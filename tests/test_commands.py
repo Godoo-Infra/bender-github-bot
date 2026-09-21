@@ -23,23 +23,23 @@ from .common import set_config
 
 def test_parse_command_not_a_command():
     with pytest.raises(InvalidCommandError):
-        list(parse_commands("/ocabot not_a_command"))
+        list(parse_commands("/benderbot not_a_command"))
 
 
 def test_parse_command_multi():
     cmds = list(
         parse_commands("""
                 ...
-                /ocabot merge major
-                /ocabot   merge   patch
-                /ocabot merge patch
-                /ocabot merge nobump, please
-                /ocabot merge  minor, please
-                /ocabot merge minor, please
-                /ocabot merge nobump.
-                /ocabot merge patch. blah
-                /ocabot merge minor # ignored
-                /ocabot rebase, please
+                /benderbot merge major
+                /benderbot   merge   patch
+                /benderbot merge patch
+                /benderbot merge nobump, please
+                /benderbot merge  minor, please
+                /benderbot merge minor, please
+                /benderbot merge nobump.
+                /benderbot merge patch. blah
+                /benderbot merge minor # ignored
+                /benderbot rebase, please
                 ...
             """)
     )
@@ -61,7 +61,7 @@ def test_parse_command_2():
     cmds = list(
         parse_commands(
             "Great contribution, thanks!\r\n\r\n"
-            "/ocabot merge nobump\r\n\r\n"
+            "/benderbot merge nobump\r\n\r\n"
             "Please forward port it to 12.0."
         )
     )
@@ -69,36 +69,36 @@ def test_parse_command_2():
 
 
 def test_parse_command_merge():
-    cmds = list(parse_commands("/ocabot merge major"))
+    cmds = list(parse_commands("/benderbot merge major"))
     assert len(cmds) == 1
     assert cmds[0].name == "merge"
     assert cmds[0].bumpversion_mode == "major"
-    cmds = list(parse_commands("/ocabot merge minor"))
+    cmds = list(parse_commands("/benderbot merge minor"))
     assert len(cmds) == 1
     assert cmds[0].name == "merge"
     assert cmds[0].bumpversion_mode == "minor"
-    cmds = list(parse_commands("/ocabot merge patch"))
+    cmds = list(parse_commands("/benderbot merge patch"))
     assert len(cmds) == 1
     assert cmds[0].name == "merge"
     assert cmds[0].bumpversion_mode == "patch"
-    cmds = list(parse_commands("/ocabot merge nobump"))
+    cmds = list(parse_commands("/benderbot merge nobump"))
     assert len(cmds) == 1
     assert cmds[0].name == "merge"
     assert cmds[0].bumpversion_mode == "nobump"
     with pytest.raises(RequiredOptionError):
-        list(parse_commands("/ocabot merge"))
+        list(parse_commands("/benderbot merge"))
     with pytest.raises(InvalidOptionsError):
-        list(parse_commands("/ocabot merge nobump brol"))
+        list(parse_commands("/benderbot merge nobump brol"))
     with pytest.raises(OptionsError):
-        list(parse_commands("/ocabot merge brol"))
+        list(parse_commands("/benderbot merge brol"))
 
 
 def test_parse_command_rebase():
-    cmds = list(parse_commands("/ocabot rebase"))
+    cmds = list(parse_commands("/benderbot rebase"))
     assert len(cmds) == 1
     assert cmds[0].name == "rebase"
     with pytest.raises(InvalidOptionsError):
-        list(parse_commands("/ocabot rebase brol"))
+        list(parse_commands("/benderbot rebase brol"))
 
 
 def test_parse_command_comment():
@@ -107,7 +107,7 @@ def test_parse_command_comment():
 > Some comment {merge_command}
 >> Double comment! {merge_command}
 This is the one {merge_command} patch
-    """.format(merge_command="/ocabot merge")
+    """.format(merge_command="/benderbot merge")
     command = list(parse_commands(body))
     assert len(command) == 1
     command = command[0]
@@ -124,7 +124,7 @@ def prefix(request, monkeypatch):
     return request.param
 
 
-@pytest.mark.parametrize("prefix", ["/ocabot", "/bender", "@bot"], indirect=True)
+@pytest.mark.parametrize("prefix", ["/benderbot", "/bender", "@bot"], indirect=True)
 def test_parse_command_honours_the_configured_prefix(prefix):
     cmds = list(parse_commands(f"{prefix} merge patch"))
     assert [(cmd.name, cmd.options) for cmd in cmds] == [("merge", ["patch"])]
@@ -133,9 +133,9 @@ def test_parse_command_honours_the_configured_prefix(prefix):
 def test_parse_command_several_prefixes(monkeypatch):
     # a second prefix can run alongside the first, during a rename
     monkeypatch.setattr(
-        commands_base, "BOT_COMMAND_RE", build_command_re(["/ocabot", "/bender"])
+        commands_base, "BOT_COMMAND_RE", build_command_re(["/benderbot", "/bender"])
     )
-    cmds = list(parse_commands("/ocabot merge patch\n/bender rebase"))
+    cmds = list(parse_commands("/benderbot merge patch\n/bender rebase"))
     assert [(cmd.name, cmd.options) for cmd in cmds] == [
         ("merge", ["patch"]),
         ("rebase", []),
@@ -144,20 +144,20 @@ def test_parse_command_several_prefixes(monkeypatch):
 
 @pytest.mark.parametrize("prefix", ["/bender"], indirect=True)
 def test_the_old_prefix_stops_working_when_it_is_replaced(prefix):
-    assert list(parse_commands("/ocabot merge patch")) == []
+    assert list(parse_commands("/benderbot merge patch")) == []
 
 
 def test_parse_command_migration():
-    cmds = list(parse_commands("/ocabot migration some_module"))
+    cmds = list(parse_commands("/benderbot migration some_module"))
     assert len(cmds) == 1
     assert cmds[0].name == "migration"
     assert cmds[0].module == "some_module"
     with pytest.raises(InvalidOptionsError):
-        list(parse_commands("/ocabot migration"))
+        list(parse_commands("/benderbot migration"))
 
 
 def test_parse_command_config():
-    cmds = list(parse_commands("/ocabot config"))
+    cmds = list(parse_commands("/benderbot config"))
     assert len(cmds) == 1
     assert cmds[0].name == "config"
     assert cmds[0].always_available is True

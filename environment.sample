@@ -48,7 +48,7 @@ ODOO_PASSWORD=
 
 # Coma separated list of prefixes a command may be invoked with. Several allow
 # a second prefix to run alongside the first, during a rename.
-#BOT_COMMAND_PREFIX=/ocabot
+#BOT_COMMAND_PREFIX=/benderbot
 
 # Name of the per-repository policy file, read from the target branch of a pull
 # request. See docs/design/configurable-commands.md

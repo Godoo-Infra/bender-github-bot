@@ -20,7 +20,7 @@ def create_test_data(pr, user, body):
 async def test_on_command_no_pr(mocker):
     mocker.patch("oca_github_bot.webhooks.on_command.parse_commands")
 
-    data = create_test_data(False, "test-user", "/ocabot merge")
+    data = create_test_data(False, "test-user", "/benderbot merge")
     event = EventMock(data)
     await on_command.on_command(event, None)
     on_command.parse_commands.assert_not_called()
@@ -55,7 +55,7 @@ async def test_on_command_malformed_is_reported_at_once(mocker):
     comment = mocker.patch("oca_github_bot.webhooks.on_command.add_pr_comment.delay")
     dispatch = mocker.patch("oca_github_bot.webhooks.on_command.dispatch_command.delay")
 
-    data = create_test_data(42, "test-user", "/ocabot merge nonsense")
+    data = create_test_data(42, "test-user", "/benderbot merge nonsense")
     event = EventMock(data)
     await on_command.on_command(event, None)
 

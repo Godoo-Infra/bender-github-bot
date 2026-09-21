@@ -81,7 +81,7 @@ Commands
 One can ask the bot to perform some tasks by entering special commands
 as merge request comments.
 
-``/ocabot merge`` followed by one of ``major``, ``minor``, ``patch`` or ``nobump``
+``/benderbot merge`` followed by one of ``major``, ``minor``, ``patch`` or ``nobump``
 can be used to ask the bot to do the following:
 
 * merge the PR onto a temporary branch created off the target branch
@@ -92,11 +92,11 @@ can be used to ask the bot to do the following:
 * when the version was bumped, generate a wheel, rsync it to a PEP 503
   simple index root, or upload it to one or more indexes with twine
 
-``/ocabot rebase`` can be used to ask the bot to do the following:
+``/benderbot rebase`` can be used to ask the bot to do the following:
 
 * rebase the PR on the target branch
 
-``/ocabot migration``, followed by the module name, performing the following:
+``/benderbot migration``, followed by the module name, performing the following:
 
 * Look for an issue in that repository with the name "Migration to version
   ``{version}``", where ``{version}`` is the name of the target branch.
@@ -146,11 +146,11 @@ You can also disable a selection of tasks, using ``BOT_TASKS_DISABLED``. This
 is the fleet-wide kill switch: nothing a repository asks for can re-enable
 what it names.
 
-``BOT_COMMAND_PREFIX`` sets the word that invokes a command, ``/ocabot`` by
+``BOT_COMMAND_PREFIX`` sets the word that invokes a command, ``/benderbot`` by
 default. It accepts a list, so a second prefix can run alongside the first
 during a rename::
 
-  BOT_COMMAND_PREFIX=/ocabot,/bender
+  BOT_COMMAND_PREFIX=/benderbot,/ocabot
 
 Per-repository policy
 ---------------------
@@ -173,7 +173,7 @@ that uses it, and policy may differ per Odoo series.
 
 Ask the bot what is in effect, rather than working it out::
 
-  /ocabot config
+  /benderbot config
 
 Custom commands and tasks
 -------------------------
@@ -301,7 +301,7 @@ them at once -- pointing at the bot:
 * **Events** -- *Pull requests*, *Pull request reviews*, *Issue comments*,
   *Pushes*, *Statuses*, *Check runs* and *Check suites*
 
-No other event is handled. Issue comments are what carry the ``/ocabot``
+No other event is handled. Issue comments are what carry the ``/benderbot``
 commands, so leaving them out makes every command silently do nothing.
 
 Branches
@@ -313,8 +313,8 @@ From ``GEN_PYPROJECT_MIN_VERSION`` (default ``17.0``) the bot generates
 ``pyproject.toml`` rather than ``setup.py``. Branches named ``master``,
 ``main`` or ``x.y`` are never deleted by the bot.
 
-What ``/ocabot merge`` needs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+What ``/benderbot merge`` needs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The merge bot does not use the GitHub merge button. It pushes a temporary
 branch named ``<target>-ocabot-merge-pr-<pr>-by-<user>-bump-<mode>`` to the
@@ -334,7 +334,7 @@ statuses and check suites that do not count towards green.
 Who may invoke commands
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-A ``/ocabot`` command is honoured when the commenter has push access to the
+A ``/benderbot`` command is honoured when the commenter has push access to the
 repository, or is declared in the ``maintainers`` key of every addon the pull
 request modifies. ``MAINTAINER_CHECK_ODOO_RELEASES`` lists the branches
 searched for that declaration.
@@ -347,7 +347,7 @@ goes green, ``approved`` once a pull request has ``APPROVALS_REQUIRED``
 approving reviews (default 2), ``ready to merge`` once it is also
 ``MIN_PR_AGE`` days old (default 5), and ``bot is merging ⏳`` then
 ``merged 🎉`` while merging. It also creates one label per modified addon at
-repository level, coloured with ``MODULE_LABEL_COLOR``. ``/ocabot migration``
+repository level, coloured with ``MODULE_LABEL_COLOR``. ``/benderbot migration``
 creates the milestone named after the target branch, and the "Migration to
 version x.y" issue, if they do not exist yet.
 

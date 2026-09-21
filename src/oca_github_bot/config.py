@@ -117,7 +117,7 @@ BOT_TASKS_DISABLED = os.environ.get("BOT_TASKS_DISABLED", "").split(",")
 # a second prefix to run alongside the first, during a rename.
 BOT_COMMAND_PREFIX = [
     prefix.strip()
-    for prefix in os.environ.get("BOT_COMMAND_PREFIX", "/ocabot").split(",")
+    for prefix in os.environ.get("BOT_COMMAND_PREFIX", "/benderbot").split(",")
     if prefix.strip()
 ]
 
