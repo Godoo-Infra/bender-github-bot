@@ -158,38 +158,156 @@ The bot URL must be exposed on the internet through a reverse
 proxy and configured as a GitHub webhook, using the secret configured
 in ``GITHUB_SECRET``.
 
-Using nix
----------
+Getting started with nix
+------------------------
 
-``nix run`` starts the same stack without docker, supervised by
-`process-compose <https://github.com/F1bonacc1/process-compose>`_:
+The flake provides everything the bot shells out to -- python 3.12, redis,
+git, rsync, pandoc and the commands from `maintainer-tools
+<https://github.com/OCA/maintainer-tools>`_ -- so nix with flakes enabled is
+the only prerequisite.
 
-* ``queue`` -- redis, appending to ``./data/queue``
-* ``bot`` -- the webhook listener, on ``HTTP_PORT`` (default 8080)
-* ``worker`` -- the celery worker
-* ``beat`` -- the celery scheduler
+1. Create ``.env`` from `environment.sample <./environment.sample>`_. Five
+   variables have to be filled in before the bot can do anything:
 
-The same command drives a stack that is already up -- ``nix run . -- process
-list``, ``nix run . -- attach``, ``nix run . -- down`` -- as it locates the
-running server by a socket path derived from the checkout.
+   ``GITHUB_SECRET``
+     the secret shared with the GitHub webhook
+   ``GITHUB_LOGIN``
+     the login of the account the bot acts as
+   ``GITHUB_TOKEN``
+     a token for that account
+   ``GIT_NAME`` and ``GIT_EMAIL``
+     the author identity for the commits the bot pushes
 
-It reads the same ``.env`` file, and rewrites the two settings that only make
-sense inside the container: ``BROKER_URI=redis://queue`` becomes the local
-redis, and a ``SIMPLE_INDEX_ROOT`` under ``/app/run`` becomes
-``./data/simple-index``. State stays in ``./data``, where the docker
-composition's bind mounts put it, so both ways of running share the git clone
-cache. Set ``OCABOT_REDIS_PORT`` if 6379 is already taken.
+   Add ``GITHUB_ORG`` to enable the scheduled tasks -- the nightly main
+   branch bot and the hourly ``ready to merge`` tagging. Without it the
+   scheduler runs nothing but its heartbeat.
+
+2. Warm the build. The first one compiles the python 3.12 dependencies
+   locally, as nixpkgs only caches the default interpreter's package set::
+
+     nix build .#stack
+
+3. Start the stack::
+
+     nix run .
+
+   This brings up redis (``queue``), the webhook listener (``bot``, on
+   ``HTTP_PORT``, default 8080), the celery ``worker`` and the celery
+   scheduler (``beat``), the last three waiting for redis to answer a ping.
+
+4. Expose the listener, so that GitHub can reach it: a reverse proxy in
+   production, or a tunnel while developing::
+
+     ngrok http 8080
+
+5. Configure each repository the bot should act on, as described in
+   `Setting up a repository for the bot`_.
+
+The same command drives a stack that is already running, locating it by a
+socket path derived from the checkout::
+
+  nix run . -- process list
+  nix run . -- attach
+  nix run . -- down
+
+State lives in ``./data``, where the docker composition's bind mounts put it,
+so both ways of running share the git clone cache: ``data/queue`` holds the
+redis append-only file, ``data/cache`` the bare clone the bot keeps of each
+repository, ``data/simple-index`` the locally published wheels, and
+``data/logs`` the process-compose log.
+
+The stack reads the same ``.env`` as the docker composition, and rewrites the
+two settings that only make sense inside a container: a ``BROKER_URI`` of
+``redis://queue`` becomes the local redis, and a ``SIMPLE_INDEX_ROOT`` under
+``/app/run`` becomes ``./data/simple-index``. Set ``OCABOT_REDIS_PORT`` if
+6379 is already taken.
 
 ``nix develop`` gives a shell with the bot's dependencies, the test
-dependencies, the ``oca-gen-*`` commands from `maintainer-tools
-<https://github.com/OCA/maintainer-tools>`_, and the stack itself as
+dependencies, the ``oca-gen-*`` commands and the stack itself as
 ``oca-github-bot-stack``, so ``pytest`` and ``pre-commit run --all-files``
-work directly.
-
-The maintainer tools are a flake input, pinned to the revision the
-``Dockerfile`` installs. To run against a local checkout of them::
+work directly. The maintainer tools are a flake input, pinned to the revision
+the ``Dockerfile`` installs; to work against a local checkout of them::
 
   nix run . --override-input maintainer-tools path:../maintainer-tools
+
+Setting up a repository for the bot
+-----------------------------------
+
+The bot account
+~~~~~~~~~~~~~~~
+
+``GITHUB_TOKEN`` must belong to an account with write access to the
+repository. The bot comments on pull requests, adds labels, creates labels
+and milestones, pushes generated files to main branches, pushes to the target
+branch when merging, and deletes merged branches. With a classic token that
+is the ``repo`` scope; with a fine-grained token, read and write on contents,
+issues and pull requests.
+
+The webhook
+~~~~~~~~~~~
+
+Add a webhook on the repository -- or on the organisation, to cover all of
+them at once -- pointing at the bot:
+
+* **Payload URL** -- the public URL of the bot, which serves the webhook at ``/``
+* **Content type** -- ``application/json``
+* **Secret** -- the same value as ``GITHUB_SECRET``
+* **Events** -- *Pull requests*, *Pull request reviews*, *Issue comments*,
+  *Pushes*, *Statuses*, *Check runs* and *Check suites*
+
+No other event is handled. Issue comments are what carry the ``/ocabot``
+commands, so leaving them out makes every command silently do nothing.
+
+Branches
+~~~~~~~~
+
+The main branch operations only run on branches named after an Odoo series,
+``x.y``, from ``MAIN_BRANCH_BOT_MIN_VERSION`` (default ``11.0``) upwards.
+From ``GEN_PYPROJECT_MIN_VERSION`` (default ``17.0``) the bot generates
+``pyproject.toml`` rather than ``setup.py``. Branches named ``master``,
+``main`` or ``x.y`` are never deleted by the bot.
+
+What ``/ocabot merge`` needs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The merge bot does not use the GitHub merge button. It pushes a temporary
+branch named ``<target>-ocabot-merge-pr-<pr>-by-<user>-bump-<mode>`` to the
+repository, waits for the CI to go green on that branch, then fast-forwards
+the target branch onto it and deletes the temporary branch. Two consequences
+for the repository:
+
+* the CI must run on pushed branches, not only on pull requests, or the bot
+  waits for a status that never arrives;
+* the bot account must be able to push to the target branch. A protected
+  branch needs the bot allowed to bypass the restriction, otherwise the final
+  push is refused after the CI has already run.
+
+``GITHUB_STATUS_IGNORED`` and ``GITHUB_CHECK_SUITES_IGNORED`` list the
+statuses and check suites that do not count towards green.
+
+Who may invoke commands
+~~~~~~~~~~~~~~~~~~~~~~~
+
+A ``/ocabot`` command is honoured when the commenter has push access to the
+repository, or is declared in the ``maintainers`` key of every addon the pull
+request modifies. ``MAINTAINER_CHECK_ODOO_RELEASES`` lists the branches
+searched for that declaration.
+
+Labels and milestones
+~~~~~~~~~~~~~~~~~~~~~
+
+Nothing has to be created by hand. The bot adds ``needs review`` when the CI
+goes green, ``approved`` once a pull request has ``APPROVALS_REQUIRED``
+approving reviews (default 2), ``ready to merge`` once it is also
+``MIN_PR_AGE`` days old (default 5), and ``bot is merging ⏳`` then
+``merged 🎉`` while merging. It also creates one label per modified addon at
+repository level, coloured with ``MODULE_LABEL_COLOR``. ``/ocabot migration``
+creates the milestone named after the target branch, and the "Migration to
+version x.y" issue, if they do not exist yet.
+
+One label is read rather than written: ``work in progress`` on a pull request
+suppresses ``needs review``, as does a title starting with ``wip:`` or
+``[wip]``.
 
 Development
 ===========
