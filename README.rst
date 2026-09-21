@@ -1,256 +1,354 @@
-##############
-OCA GitHub bot
-##############
+=================
+Bender GitHub bot
+=================
 
-.. image:: https://results.pre-commit.ci/badge/github/OCA/oca-github-bot/master.svg
-   :target: https://results.pre-commit.ci/latest/github/OCA/oca-github-bot/master
-   :alt: pre-commit.ci status
-.. image:: https://github.com/OCA/oca-github-bot/actions/workflows/ci.yml/badge.svg
-   :target: https://github.com/OCA/oca-github-bot/actions/workflows/ci.yml
-   :alt: GitHub CI status
+.. image:: https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/ci.yml
+   :alt: CI status
 
-The goal of this project is to collect in one place:
+A GitHub bot for Odoo addon repositories. It reacts to webhooks, runs
+scheduled maintenance, and takes commands typed as pull request comments --
+merging, rebasing, generating addon READMEs, icons, packaging files and
+wheels.
 
-* all operations that react to GitHub events,
-* all operations that act on GitHub repos on a scheduled basis.
+It collects in one place every operation that reacts to a GitHub event and
+every operation that runs against a repository on a schedule, instead of
+spreading them across cron jobs and ad-hoc scripts.
 
-This will make it easier to review changes, as well as monitor and manage
-these operations, compared to the current situations where these functions
-are spread across cron jobs and ad-hoc scripts.
+Forked from `OCA/oca-github-bot <https://github.com/OCA/oca-github-bot>`_.
+What this fork adds:
 
-**Table of contents**
+* **commands are a registry**, so adding one means adding a module rather than
+  editing a dispatch chain
+* **a configurable command prefix**, ``/benderbot`` by default
+* **per-repository policy**, so one deployment can serve repositories that want
+  different things from it
+* **a nix flake**, so the whole stack runs with ``nix run`` and no docker
 
 .. contents::
    :local:
+   :depth: 2
 
-Features
-========
+What it does
+============
 
-On pull request open
---------------------
+Automatically, in response to GitHub events:
 
-Mention declared maintainers that addons they maintain are being modified.
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
 
-Comment with a call for maintainers if there are no declared maintainer.
+   * - When
+     - What happens
+   * - a pull request is opened
+     - Mentions the declared maintainers of every addon it modifies, or
+       comments a call for maintainers if an addon has none.
+   * - a pull request is closed
+     - Deletes the source branch, when it was merged from a branch in the
+       same repository.
+   * - a pull request's CI goes green
+     - Adds the ``needs review`` label, unless the title starts with ``wip:``
+       or ``[wip]``, or it carries the ``work in progress`` label.
+   * - a pull request is approved
+     - Adds ``approved`` at ``APPROVALS_REQUIRED`` reviews (2 by default), then
+       ``ready to merge`` once it is also ``MIN_PR_AGE`` days old (5 by
+       default).
+   * - a push lands on a main branch
+     - Regenerates the addons table in ``README.md``, each addon's
+       ``README.rst``, missing addon icons, and the packaging files --
+       ``pyproject.toml`` from Odoo 17.0, ``setup.py`` before it -- then pushes
+       the result back.
 
-On pull request close
----------------------
+On a schedule, for every repository of every organisation in ``GITHUB_ORG``:
 
-Auto-delete pull request branch
-  When a pull request is merged from a branch in the same repo,
-  the bot deletes the source branch.
-
-On push to main branches
-------------------------
-
-Repo addons table generator in README.md
-  For addons repositories, update the addons table in README.md.
-
-Addon README.rst generator
-  For addons repositories, generate README.rst from readme fragments
-  in each addon directory, and push changes back to github.
-
-Addon icon generator
-  For addons repositories, put default OCA icon in each addon that don't have
-  yet any icon, and push changes back to github.
-
-setup.py generator
-  For addons repositories, run setuptools-odoo-make-defaults, and push
-  changes back to github.
-
-These actions are also run nightly on all repos.
-
-Also nightly, wheels are generated for all addons repositories and rsynced
-to a PEP 503 simple index or twine uploaded to compatible indexes.
-
-On Pull Request review
-----------------------
-
-When there are two approvals, set the ``approved`` label.
-When the PR is at least 5 days old, set the ``ready to merge`` label.
-
-On Pull Request CI status
--------------------------
-
-When the CI in a Pull Request goes green, set the ``needs review`` label,
-unless it has ``wip:``  or ``[wip]`` in it's title.
+* the main branch operations above, nightly, followed by building wheels and
+  publishing them to a PEP 503 index by rsync, or to a package index with
+  twine
+* the ``ready to merge`` labelling, hourly
 
 Commands
---------
+========
 
-One can ask the bot to perform some tasks by entering special commands
-as merge request comments.
+Anyone with push access, or declared in the ``maintainers`` key of every addon
+a pull request touches, can type a command as a pull request comment:
 
-``/benderbot merge`` followed by one of ``major``, ``minor``, ``patch`` or ``nobump``
-can be used to ask the bot to do the following:
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
 
-* merge the PR onto a temporary branch created off the target branch
-* merge when tests on the rebased branch are green
-* optionally bump the version number of the addons modified by the PR. (e.g. 19.0. ``major`` . ``minor`` . ``patch``)
-* when the version was bumped, udate the changelog with ``oca-towncrier``
-* run the main branch operations (see above) on it
-* when the version was bumped, generate a wheel, rsync it to a PEP 503
-  simple index root, or upload it to one or more indexes with twine
+   * - Command
+     - What it does
+   * - ``/benderbot merge major|minor|patch|nobump``
+     - Merges the pull request onto a temporary branch off the target branch,
+       waits for that branch's CI, optionally bumps the version of every
+       modified addon, updates the changelog with ``oca-towncrier``, runs the
+       main branch operations, builds and publishes a wheel, then
+       fast-forwards the target branch.
+   * - ``/benderbot rebase``
+     - Rebases the pull request on its target branch.
+   * - ``/benderbot migration MODULE_NAME``
+     - Adds the pull request to the "Migration to version x.y" issue of the
+       target branch, creating the issue and the milestone if needed, and sets
+       the milestone on the pull request.
+   * - ``/benderbot config``
+     - Reports which capabilities are enabled for this repository, and why.
 
-``/benderbot rebase`` can be used to ask the bot to do the following:
+The prefix is configurable; see `Configuration`_.
 
-* rebase the PR on the target branch
+How to run this in your org
+===========================
 
-``/benderbot migration``, followed by the module name, performing the following:
+1. Create the bot's GitHub account
+----------------------------------
 
-* Look for an issue in that repository with the name "Migration to version
-  ``{version}``", where ``{version}`` is the name of the target branch.
-* Add or edit a line in that issue, linking the module to the pull request
-  (PR) and the author of it.
-* TODO: When the PR is merged, the line gets ticked.
-* Put the milestone corresponding to the target branch in the PR.
+The bot acts as a real GitHub account. Give it write access to the
+repositories it will work on -- it comments, labels, creates labels and
+milestones, pushes generated files, pushes to target branches when merging,
+and deletes merged branches.
 
-TODO (help wanted)
-------------------
+Create a token for that account: the ``repo`` scope for a classic token, or
+read and write on contents, issues and pull requests for a fine-grained one.
 
-See our open `issues <https://github.com/OCA/oca-github-bot/issues>`_,
-pick one and contribute!
+2. Configure the deployment
+---------------------------
 
+Copy ``environment.sample`` to ``.env`` and fill in the five settings that
+must be set before anything works::
 
-Developing new features
-=======================
+  GITHUB_SECRET=   # the secret you will configure on the webhook
+  GITHUB_LOGIN=    # the bot account's login
+  GITHUB_TOKEN=    # its token
+  GIT_NAME=        # the author of the commits the bot pushes
+  GIT_EMAIL=
 
-The easiest is to look at examples.
+Add ``GITHUB_ORG`` -- a comma separated list -- to enable the scheduled work.
+Without it the scheduler runs nothing but its heartbeat.
 
-New webhooks are added in the `webhooks <./src/oca_github_bot/webhooks>`_ directory.
-Webhooks execution time must be very short and they should
-delegate the bulk of their work as delayed tasks, which have
-the benefit of not overloading the machine and having proper
-error handling and monitoring.
+3. Start it
+-----------
 
-Tasks are in the `tasks <./src/oca_github_bot/tasks>`_ directory. They are `Celery tasks
-<http://docs.celeryproject.org/en/latest/userguide/tasks.html>`_.
+With nix::
 
-Tasks can be scheduled, in `cron.py <./src/oca_github_bot/cron.py>`_, using the `Celery periodic tasks
-<http://docs.celeryproject.org/en/latest/userguide/periodic-tasks.html>`_ mechanism.
+  nix build .#stack     # first build compiles the dependencies, once
+  nix run .
 
-Running it
-==========
+or with docker::
+
+  docker compose up --build
+
+Either way you get redis, the webhook listener on port 8080, a celery worker
+and a scheduler. See `Running the stack`_ for the details.
+
+4. Put the listener on the internet
+-----------------------------------
+
+GitHub has to reach it. A reverse proxy in production; a tunnel while you are
+trying things out::
+
+  ngrok http 8080
+
+5. Point each repository at the bot
+-----------------------------------
+
+Add a webhook, on the repository or on the organisation to cover all of them
+at once:
+
+.. list-table::
+   :widths: 25 75
+
+   * - Payload URL
+     - the bot's public URL; it serves the webhook at ``/``
+   * - Content type
+     - ``application/json``
+   * - Secret
+     - the same value as ``GITHUB_SECRET``
+   * - Events
+     - *Pull requests*, *Pull request reviews*, *Issue comments*, *Pushes*,
+       *Statuses*, *Check runs*, *Check suites*
+
+No other event is handled. Issue comments are what carry the commands, so
+leaving them out makes every command silently do nothing.
+
+6. Check what the repositories expect
+-------------------------------------
+
+Three things have to hold, and they are easy to miss:
+
+**Main branches are named after an Odoo series.** The generators only run on
+branches named ``x.y``, from ``MAIN_BRANCH_BOT_MIN_VERSION`` (``11.0``)
+upwards. Branches named ``master``, ``main`` or ``x.y`` are never deleted by
+the bot.
+
+**CI runs on pushed branches, not only on pull requests.** The merge bot does
+not use the GitHub merge button: it pushes
+``<target>-benderbot-merge-pr-<pr>-by-<user>-bump-<mode>``, waits for that
+branch to go green, then fast-forwards the target branch onto it. If your CI
+only builds pull requests, the bot waits for a status that never arrives.
+
+**The bot can push to the target branch.** A protected branch needs the bot
+allowed to bypass the restriction, or the final push is refused after the CI
+has already run.
+
+Anything else keyed on the merge branch name -- CI filters, branch protection
+patterns -- has to match ``*-benderbot-merge-*``.
+
+7. Decide what each repository gets
+-----------------------------------
+
+By default every repository gets everything. To narrow it, drop a
+``.bender.yml`` in the repository::
+
+  version: 1
+  tasks:
+    deny: [merge_bot]
+
+Then ask the bot what it resolved to, rather than working it out::
+
+  /benderbot config
+
+Nothing else needs creating by hand: the bot adds the labels it uses and
+creates the milestone for a migration issue if it is missing.
+
+Configuration
+=============
 
 Environment variables
 ---------------------
 
-First create and customize a file named ``.env``,
-based on `environment.sample <./environment.sample>`_.
+Set in ``.env``. Everything not listed here is in ``environment.sample``.
 
-Tasks performed by the bot can be specified by setting the ``BOT_TASKS``
-variable. This is useful if you want to use this bot for your own GitHub
-organisation.
+.. list-table::
+   :header-rows: 1
+   :widths: 32 20 48
 
-You can also disable a selection of tasks, using ``BOT_TASKS_DISABLED``. This
-is the fleet-wide kill switch: nothing a repository asks for can re-enable
-what it names.
+   * - Variable
+     - Default
+     - Meaning
+   * - ``GITHUB_SECRET``
+     - *required*
+     - Shared secret configured on the GitHub webhook.
+   * - ``GITHUB_LOGIN``
+     - *required*
+     - Login of the account the bot acts as.
+   * - ``GITHUB_TOKEN``
+     - *required*
+     - Token for that account.
+   * - ``GIT_NAME``, ``GIT_EMAIL``
+     - *required*
+     - Author identity for the commits the bot pushes.
+   * - ``GITHUB_ORG``
+     - empty
+     - Organisations the scheduled work runs against. Empty means none.
+   * - ``BOT_COMMAND_PREFIX``
+     - ``/benderbot``
+     - What invokes a command. A list runs several at once, which is how you
+       keep the old prefix alive during a rename.
+   * - ``BOT_CONFIG_FILENAME``
+     - ``.bender.yml``
+     - Name of the per-repository policy file.
+   * - ``BOT_TASKS``
+     - ``all``
+     - Capabilities this deployment offers at all.
+   * - ``BOT_TASKS_DISABLED``
+     - empty
+     - The fleet-wide kill switch. Nothing a repository asks for can re-enable
+       what is named here.
+   * - ``HTTP_HOST``, ``HTTP_PORT``
+     - all interfaces, ``8080``
+     - Where the webhook listener binds. The nix stack defaults the host to
+       ``127.0.0.1``.
+   * - ``BROKER_URI``
+     - ``redis://queue``
+     - The celery broker. The nix stack rewrites this to the local redis.
+   * - ``APPROVALS_REQUIRED``
+     - ``2``
+     - Approving reviews before the ``approved`` label.
+   * - ``MIN_PR_AGE``
+     - ``5``
+     - Days before the ``ready to merge`` label.
+   * - ``GITHUB_STATUS_IGNORED``, ``GITHUB_CHECK_SUITES_IGNORED``
+     - see sample
+     - Statuses and check suites that do not count towards green.
+   * - ``SIMPLE_INDEX_ROOT``
+     - empty
+     - PEP 503 index to rsync wheels into. Empty disables it.
+   * - ``OCABOT_TWINE_REPOSITORIES``
+     - empty
+     - Indexes to twine-upload wheels to. Empty disables it.
+   * - ``MODULE_LABEL_COLOR``
+     - ``#ffc``
+     - Colour of the per-addon labels the bot creates.
+   * - ``SENTRY_DSN``
+     - empty
+     - Enables Sentry reporting when set.
 
-``BOT_COMMAND_PREFIX`` sets the word that invokes a command, ``/benderbot`` by
-default. It accepts a list, so a second prefix can run alongside the first
-during a rename::
-
-  BOT_COMMAND_PREFIX=/benderbot,/ocabot
+``ODOO_URL``, ``ODOO_DB``, ``ODOO_LOGIN`` and ``ODOO_PASSWORD`` are read into
+configuration but nothing uses them: ``odoo_client.py`` has no importers.
 
 Per-repository policy
 ---------------------
 
-A repository may carry a policy file, ``.bender.yml`` by default
-(``BOT_CONFIG_FILENAME``), naming what applies to it::
+A repository may carry a policy file naming what applies to it::
 
   version: 1
   tasks:
     allow: [deploy_staging]        # adds to the default set
     deny:  [merge_bot, rebase_bot] # removes from it
 
-Without the file, the default set applies, which is everything the bot ships
-with. ``deny`` wins over ``allow``, and ``BOT_TASKS_DISABLED`` wins over both.
+Resolution, highest precedence first:
 
-The file only selects from capabilities the bot has registered; it never
-describes what a task does. It is read from the **target branch** of a pull
-request, so a pull request cannot grant itself a capability in the same diff
-that uses it, and policy may differ per Odoo series.
+1. ``BOT_TASKS_DISABLED``, which is absolute
+2. the repository's ``deny``
+3. the repository's ``allow``
+4. the default set, which is everything shipped, narrowed by ``BOT_TASKS``
 
-Ask the bot what is in effect, rather than working it out::
+Without a file, the default set applies. A capability may be named by its
+canonical name (``merge_bot``) or by the word a user types (``merge``).
 
-  /benderbot config
+Two properties worth knowing:
+
+* The file **selects** from capabilities the bot has registered. It never
+  describes what a task does, so write access to one repository cannot become
+  code execution against the bot's token.
+* It is read from the **target branch** of a pull request, never the branch
+  proposing the change, so a pull request cannot grant itself a capability in
+  the same diff that uses it. Policy may therefore differ per Odoo series.
+
+An unreadable or malformed file falls back to the defaults; ``/benderbot
+config`` reports the parse error and any name it did not recognise.
 
 Custom commands and tasks
 -------------------------
 
 Site-specific actions live in `custom <./src/oca_github_bot/custom>`_, one
-module per feature, holding the celery task and the command that starts it.
+module per feature holding the celery task and the command that starts it.
 Every module there is imported at startup, so adding an action means adding a
 file and restarting.
 
-Register custom capabilities with ``default=False``, on both the
-``@switchable`` and the command class, so that adding one changes nothing
-until a repository allows it by name.
+Register them with ``default=False``, on both the ``@switchable`` and the
+command class, so that adding one changes nothing until a repository allows it
+by name.
 
-The design and its rationale are in
+The design and its reasoning are in
 `docs/design/configurable-commands.md <./docs/design/configurable-commands.md>`_.
 
-Using docker-compose
---------------------
+Running the stack
+=================
 
-``docker-compose up --build`` will start
-
-* the bot, listening for webhooks calls on port 8080
-* a celery ``worker`` to process long running tasks
-* a celery ``beat`` to launch scheduled tasks
-* a ``flower`` celery monitoring tool on port 5555
-
-The bot URL must be exposed on the internet through a reverse
-proxy and configured as a GitHub webhook, using the secret configured
-in ``GITHUB_SECRET``.
-
-Getting started with nix
-------------------------
+With nix
+--------
 
 The flake provides everything the bot shells out to -- python 3.12, redis,
 git, rsync, pandoc and the commands from `maintainer-tools
 <https://github.com/OCA/maintainer-tools>`_ -- so nix with flakes enabled is
-the only prerequisite.
+the only prerequisite::
 
-1. Create ``.env`` from `environment.sample <./environment.sample>`_. Five
-   variables have to be filled in before the bot can do anything:
+  nix build .#stack   # the first build compiles the dependencies locally
+  nix run .
 
-   ``GITHUB_SECRET``
-     the secret shared with the GitHub webhook
-   ``GITHUB_LOGIN``
-     the login of the account the bot acts as
-   ``GITHUB_TOKEN``
-     a token for that account
-   ``GIT_NAME`` and ``GIT_EMAIL``
-     the author identity for the commits the bot pushes
-
-   Add ``GITHUB_ORG`` to enable the scheduled tasks -- the nightly main
-   branch bot and the hourly ``ready to merge`` tagging. Without it the
-   scheduler runs nothing but its heartbeat.
-
-2. Warm the build. The first one compiles the python 3.12 dependencies
-   locally, as nixpkgs only caches the default interpreter's package set::
-
-     nix build .#stack
-
-3. Start the stack::
-
-     nix run .
-
-   This brings up redis (``queue``), the webhook listener (``bot``, on
-   ``HTTP_PORT``, default 8080), the celery ``worker`` and the celery
-   scheduler (``beat``), the last three waiting for redis to answer a ping.
-
-4. Expose the listener, so that GitHub can reach it: a reverse proxy in
-   production, or a tunnel while developing::
-
-     ngrok http 8080
-
-5. Configure each repository the bot should act on, as described in
-   `Setting up a repository for the bot`_.
-
-The same command drives a stack that is already running, locating it by a
-socket path derived from the checkout::
+That runs redis (``queue``), the webhook listener (``bot``), the celery
+``worker`` and the scheduler (``beat``), the last three waiting for redis to
+answer a ping. The same command drives a stack that is already up::
 
   nix run . -- process list
   nix run . -- attach
@@ -258,167 +356,80 @@ socket path derived from the checkout::
 
 State lives in ``./data``, where the docker composition's bind mounts put it,
 so both ways of running share the git clone cache: ``data/queue`` holds the
-redis append-only file, ``data/cache`` the bare clone the bot keeps of each
-repository, ``data/simple-index`` the locally published wheels, and
-``data/logs`` the process-compose log.
+redis append-only file, ``data/cache`` the bare clone of each repository,
+``data/simple-index`` the locally published wheels, ``data/logs`` the
+process-compose log.
 
-The stack reads the same ``.env`` as the docker composition, and rewrites the
-two settings that only make sense inside a container: a ``BROKER_URI`` of
-``redis://queue`` becomes the local redis, and a ``SIMPLE_INDEX_ROOT`` under
-``/app/run`` becomes ``./data/simple-index``. Set ``OCABOT_REDIS_PORT`` if
-6379 is already taken.
+It reads the same ``.env``, rewriting the two settings that only make sense
+inside a container: a ``BROKER_URI`` of ``redis://queue`` becomes the local
+redis, and a ``SIMPLE_INDEX_ROOT`` under ``/app/run`` becomes
+``./data/simple-index``. Set ``OCABOT_REDIS_PORT`` if 6379 is taken.
 
-``nix develop`` gives a shell with the bot's dependencies, the test
-dependencies, the ``oca-gen-*`` commands and the stack itself as
-``oca-github-bot-stack``, so ``pytest`` and ``pre-commit run --all-files``
-work directly. The maintainer tools are a flake input, pinned to the revision
-the ``Dockerfile`` installs; to work against a local checkout of them::
+To work against a local checkout of the maintainer tools::
 
   nix run . --override-input maintainer-tools path:../maintainer-tools
 
-Setting up a repository for the bot
------------------------------------
+With docker compose
+-------------------
 
-The bot account
-~~~~~~~~~~~~~~~
+``docker compose up --build`` starts the bot on port 8080, a ``worker``, a
+``beat`` scheduler and a ``flower`` monitoring UI on port 5555.
 
-``GITHUB_TOKEN`` must belong to an account with write access to the
-repository. The bot comments on pull requests, adds labels, creates labels
-and milestones, pushes generated files to main branches, pushes to the target
-branch when merging, and deletes merged branches. With a classic token that
-is the ``repo`` scope; with a fine-grained token, read and write on contents,
-issues and pull requests.
-
-The webhook
-~~~~~~~~~~~
-
-Add a webhook on the repository -- or on the organisation, to cover all of
-them at once -- pointing at the bot:
-
-* **Payload URL** -- the public URL of the bot, which serves the webhook at ``/``
-* **Content type** -- ``application/json``
-* **Secret** -- the same value as ``GITHUB_SECRET``
-* **Events** -- *Pull requests*, *Pull request reviews*, *Issue comments*,
-  *Pushes*, *Statuses*, *Check runs* and *Check suites*
-
-No other event is handled. Issue comments are what carry the ``/benderbot``
-commands, so leaving them out makes every command silently do nothing.
-
-Branches
-~~~~~~~~
-
-The main branch operations only run on branches named after an Odoo series,
-``x.y``, from ``MAIN_BRANCH_BOT_MIN_VERSION`` (default ``11.0``) upwards.
-From ``GEN_PYPROJECT_MIN_VERSION`` (default ``17.0``) the bot generates
-``pyproject.toml`` rather than ``setup.py``. Branches named ``master``,
-``main`` or ``x.y`` are never deleted by the bot.
-
-What ``/benderbot merge`` needs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The merge bot does not use the GitHub merge button. It pushes a temporary
-branch named ``<target>-benderbot-merge-pr-<pr>-by-<user>-bump-<mode>`` to the
-repository, waits for the CI to go green on that branch, then fast-forwards
-the target branch onto it and deletes the temporary branch. Two consequences
-for the repository:
-
-* the CI must run on pushed branches, not only on pull requests, or the bot
-  waits for a status that never arrives;
-* the bot account must be able to push to the target branch. A protected
-  branch needs the bot allowed to bypass the restriction, otherwise the final
-  push is refused after the CI has already run.
-
-``GITHUB_STATUS_IGNORED`` and ``GITHUB_CHECK_SUITES_IGNORED`` list the
-statuses and check suites that do not count towards green.
-
-Who may invoke commands
-~~~~~~~~~~~~~~~~~~~~~~~
-
-A ``/benderbot`` command is honoured when the commenter has push access to the
-repository, or is declared in the ``maintainers`` key of every addon the pull
-request modifies. ``MAINTAINER_CHECK_ODOO_RELEASES`` lists the branches
-searched for that declaration.
-
-Labels and milestones
-~~~~~~~~~~~~~~~~~~~~~
-
-Nothing has to be created by hand. The bot adds ``needs review`` when the CI
-goes green, ``approved`` once a pull request has ``APPROVALS_REQUIRED``
-approving reviews (default 2), ``ready to merge`` once it is also
-``MIN_PR_AGE`` days old (default 5), and ``bot is merging ⏳`` then
-``merged 🎉`` while merging. It also creates one label per modified addon at
-repository level, coloured with ``MODULE_LABEL_COLOR``. ``/benderbot migration``
-creates the milestone named after the target branch, and the "Migration to
-version x.y" issue, if they do not exist yet.
-
-One label is read rather than written: ``work in progress`` on a pull request
-suppresses ``needs review``, as does a title starting with ``wip:`` or
-``[wip]``.
+Export ``UID`` and ``GID`` first. The composition runs its containers as
+``"${UID}:${GID}"``, and in a shell that does not export them -- fish, among
+others -- that becomes ``":"``, so the containers run as root and leave
+root-owned files in ``./data``.
 
 Development
 ===========
 
-This project uses `black <https://github.com/ambv/black>`_
-as code formatting convention, as well as isort and flake8.
-To make sure local coding convention are respected before
-you commit, install
-`pre-commit <https://github.com/pre-commit/pre-commit>`_ and
-run ``pre-commit install`` after cloning the repository.
+``nix develop`` gives a shell with the bot's dependencies, the test
+dependencies, the ``oca-gen-*`` commands and the stack itself as
+``oca-github-bot-stack``::
 
-To run tests, type ``tox``. Test are written with pytest.
+  nix develop -c pytest          # the test suite
+  nix develop -c pre-commit run --all-files
 
-Here is a recommended procedure to test locally:
+Without nix, ``tox`` runs the same tests, and ``pre-commit install`` sets up
+the formatting hooks. Formatting is ruff; tests are pytest.
 
-* Prepare an ``environment`` file by cloning and adapting ``environment.sample``.
-* Load ``environment`` in your shell, for instance with bash:
+Where things live:
 
-.. code::
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
 
-  set -o allexport
-  source environment
-  set +o allexport
-
-* Launch the ``redis`` message queue:
-
-.. code::
-
-  docker run -p 6379:6379 redis
-
-* Install the `maintainer tools <https://github.com/OCA/maintainer-tools>`_ and add the generated binaries to your path:
-
-.. code::
-
-  PATH=/path/to/maintainer-tools/env/bin/:$PATH
-
-* Create a virtual environment and install the project in it:
-
-.. code::
-
-  python3 -m venv venv
-  source venv/bin/activate
-  pip install -r requirements.txt -e .
-
-* Then you can debug the two processes in your favorite IDE:
-
-  - the webhook server: ``python -m oca_github_bot``
-  - the task worker: ``python -m celery --app=oca_github_bot.queue.app  worker --pool=solo --loglevel=INFO``
-
-* To expose the webhook server on your local machine to internet,
-  you can use `ngrok <https://ngrok.com/>`_
-* Then configure a GitHub webhook in a sandbox project in your organization
-  so you can start receiving webhook calls to your local machine.
+   * - Directory
+     - What goes there
+   * - `webhooks <./src/oca_github_bot/webhooks>`_
+     - Handlers for GitHub events. These must be quick, and should delegate
+       real work to a task.
+   * - `tasks <./src/oca_github_bot/tasks>`_
+     - `Celery tasks <https://docs.celeryq.dev/en/stable/userguide/tasks.html>`_,
+       where the work happens.
+   * - `commands <./src/oca_github_bot/commands>`_
+     - One module per command, discovered at import.
+   * - `custom <./src/oca_github_bot/custom>`_
+     - Site-specific commands and tasks, kept apart so upstream merges do not
+       conflict with them.
+   * - `cron.py <./src/oca_github_bot/cron.py>`_
+     - The schedule, as `celery periodic tasks
+       <https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html>`_.
 
 Releasing
 =========
 
-To release a new version, follow these steps:
-- ``towncrier --version YYYYMMDD``
-- git commit the updated `HISTORY.rst` and removed newfragments
-- ``git tag vYYYYMMDD``
-- ``git push --tags``
+* ``towncrier --version YYYYMMDD``
+* commit the updated ``HISTORY.rst`` and the removed newsfragments
+* ``git tag vYYYYMMDD``
+* ``git push --tags``
 
-Contributors
-============
+Credits
+=======
+
+Forked from `OCA/oca-github-bot <https://github.com/OCA/oca-github-bot>`_,
+built and maintained by the `Odoo Community Association
+<https://odoo-community.org>`_ and its contributors:
 
 * Stéphane Bidoul <stephane.bidoul@acsone.eu>
 * Holger Brunn <hbrunn@therp.nl>
@@ -431,15 +442,4 @@ Contributors
 * Tecnativa - Pedro M. Baeza
 * Tecnativa - Víctor Martínez
 
-Maintainers
-===========
-
-This module is maintained by the OCA.
-
-.. image:: https://odoo-community.org/logo.png
-   :alt: Odoo Community Association
-   :target: https://odoo-community.org
-
-OCA, or the Odoo Community Association, is a nonprofit organization whose
-mission is to support the collaborative development of Odoo features and
-promote its widespread use.
+Distributed under the MIT License, as the original is.
