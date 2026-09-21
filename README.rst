@@ -158,6 +158,39 @@ The bot URL must be exposed on the internet through a reverse
 proxy and configured as a GitHub webhook, using the secret configured
 in ``GITHUB_SECRET``.
 
+Using nix
+---------
+
+``nix run`` starts the same stack without docker, supervised by
+`process-compose <https://github.com/F1bonacc1/process-compose>`_:
+
+* ``queue`` -- redis, appending to ``./data/queue``
+* ``bot`` -- the webhook listener, on ``HTTP_PORT`` (default 8080)
+* ``worker`` -- the celery worker
+* ``beat`` -- the celery scheduler
+
+The same command drives a stack that is already up -- ``nix run . -- process
+list``, ``nix run . -- attach``, ``nix run . -- down`` -- as it locates the
+running server by a socket path derived from the checkout.
+
+It reads the same ``.env`` file, and rewrites the two settings that only make
+sense inside the container: ``BROKER_URI=redis://queue`` becomes the local
+redis, and a ``SIMPLE_INDEX_ROOT`` under ``/app/run`` becomes
+``./data/simple-index``. State stays in ``./data``, where the docker
+composition's bind mounts put it, so both ways of running share the git clone
+cache. Set ``OCABOT_REDIS_PORT`` if 6379 is already taken.
+
+``nix develop`` gives a shell with the bot's dependencies, the test
+dependencies, the ``oca-gen-*`` commands from `maintainer-tools
+<https://github.com/OCA/maintainer-tools>`_, and the stack itself as
+``oca-github-bot-stack``, so ``pytest`` and ``pre-commit run --all-files``
+work directly.
+
+The maintainer tools are a flake input, pinned to the revision the
+``Dockerfile`` installs. To run against a local checkout of them::
+
+  nix run . --override-input maintainer-tools path:../maintainer-tools
+
 Development
 ===========
 

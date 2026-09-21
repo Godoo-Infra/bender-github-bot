@@ -1,0 +1,45 @@
+{
+  "nodes": {
+    "maintainer-tools": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1758451543,
+        "narHash": "sha256-oye26Il1d2V6Wu+KY0/QFRgFjlldRnt3EBdlSyCrA+I=",
+        "owner": "OCA",
+        "repo": "maintainer-tools",
+        "rev": "f70373fca6830e6536c3967ba5794311602b4bd4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "OCA",
+        "repo": "maintainer-tools",
+        "rev": "f70373fca6830e6536c3967ba5794311602b4bd4",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1789885152,
+        "narHash": "sha256-mDNo95riUw8k0MA2Btzj/OuiMcfLKofqIliLYsLbrSY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "6d663c0533ff269008fb84e45930151e37c99db9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "maintainer-tools": "maintainer-tools",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

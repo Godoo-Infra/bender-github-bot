@@ -122,3 +122,7 @@ venv.bak/
 
 # dotenv files
 .env*
+
+# nix build results
+/result
+/result-*
