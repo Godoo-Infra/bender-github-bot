@@ -1,0 +1,47 @@
+name: Nix
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  # a new push to a pull request supersedes the run already in flight
+  group: nix-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: flake check and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      # The first run builds the python 3.12 package set, which nixpkgs does
+      # not cache; later runs reuse the store from this cache.
+      - name: Cache the nix store
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/nix
+          key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
+          restore-keys: |
+            nix-${{ runner.os }}-
+
+      - name: Check the flake
+        run: nix flake check -L
+
+      - name: Run the tests
+        # the same command the devShell runs locally
+        run: nix develop -c pytest -q --vcr-record=none
+
+      - name: Build the stack
+        run: nix build .#stack -L

@@ -1,6 +1,7 @@
 # Bender GitHub bot
 
-[![CI status](https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/ci.yml)
+[![CI](https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/ci.yml)
+[![Nix](https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/nix.yml/badge.svg)](https://github.com/Godoo-Infra/bender-github-bot/actions/workflows/nix.yml)
 
 A GitHub bot for Odoo addon repositories. It reacts to webhooks, runs scheduled
 maintenance, and takes commands typed as pull request comments — merging,
@@ -317,6 +318,17 @@ nix develop -c pre-commit run --all-files
 
 Without nix, `tox` runs the same tests, and `pre-commit install` sets up the
 formatting hooks. Formatting is ruff; tests are pytest.
+
+Both run on every pull request and on pushes to `master`:
+
+| Workflow | What it runs |
+| --- | --- |
+| [CI](./.github/workflows/ci.yml) | `tox`: pytest on python 3.12, the README check, and pre-commit. |
+| [Nix](./.github/workflows/nix.yml) | `nix flake check`, the test suite in the devShell, and a build of the stack. |
+
+The nix workflow's first run compiles the python 3.12 package set, which
+nixpkgs does not cache, so expect it to be slow once and quick afterwards. A
+binary cache such as [Cachix](https://www.cachix.org/) removes even that.
 
 Where things live:
 
