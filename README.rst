@@ -317,7 +317,7 @@ What ``/benderbot merge`` needs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The merge bot does not use the GitHub merge button. It pushes a temporary
-branch named ``<target>-ocabot-merge-pr-<pr>-by-<user>-bump-<mode>`` to the
+branch named ``<target>-benderbot-merge-pr-<pr>-by-<user>-bump-<mode>`` to the
 repository, waits for the CI to go green on that branch, then fast-forwards
 the target branch onto it and deletes the temporary branch. Two consequences
 for the repository:
