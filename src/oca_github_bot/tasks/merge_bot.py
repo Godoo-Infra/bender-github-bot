@@ -11,6 +11,7 @@ from ..config import (
     GITHUB_CHECK_SUITES_IGNORED,
     GITHUB_STATUS_IGNORED,
     MERGE_BOT_INTRO_MESSAGES,
+    STEP,
     dist_publisher,
     switchable,
 )
@@ -72,7 +73,7 @@ def _get_merge_bot_intro_message():
     return MERGE_BOT_INTRO_MESSAGES[i]
 
 
-@switchable("merge_bot_towncrier")
+@switchable("merge_bot_towncrier", kind=STEP)
 def _merge_bot_towncrier(org, repo, target_branch, addon_dirs, bumpversion_mode, cwd):
     for addon_dir in addon_dirs:
         # Run oca-towncrier: this updates and git add readme/HISTORY.rst

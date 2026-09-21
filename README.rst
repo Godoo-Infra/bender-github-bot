@@ -142,7 +142,53 @@ Tasks performed by the bot can be specified by setting the ``BOT_TASKS``
 variable. This is useful if you want to use this bot for your own GitHub
 organisation.
 
-You can also disable a selection of tasks, using ``BOT_TASKS_DISABLED``.
+You can also disable a selection of tasks, using ``BOT_TASKS_DISABLED``. This
+is the fleet-wide kill switch: nothing a repository asks for can re-enable
+what it names.
+
+``BOT_COMMAND_PREFIX`` sets the word that invokes a command, ``/ocabot`` by
+default. It accepts a list, so a second prefix can run alongside the first
+during a rename::
+
+  BOT_COMMAND_PREFIX=/ocabot,/bender
+
+Per-repository policy
+---------------------
+
+A repository may carry a policy file, ``.bender.yml`` by default
+(``BOT_CONFIG_FILENAME``), naming what applies to it::
+
+  version: 1
+  tasks:
+    allow: [deploy_staging]        # adds to the default set
+    deny:  [merge_bot, rebase_bot] # removes from it
+
+Without the file, the default set applies, which is everything the bot ships
+with. ``deny`` wins over ``allow``, and ``BOT_TASKS_DISABLED`` wins over both.
+
+The file only selects from capabilities the bot has registered; it never
+describes what a task does. It is read from the **target branch** of a pull
+request, so a pull request cannot grant itself a capability in the same diff
+that uses it, and policy may differ per Odoo series.
+
+Ask the bot what is in effect, rather than working it out::
+
+  /ocabot config
+
+Custom commands and tasks
+-------------------------
+
+Site-specific actions live in `custom <./src/oca_github_bot/custom>`_, one
+module per feature, holding the celery task and the command that starts it.
+Every module there is imported at startup, so adding an action means adding a
+file and restarting.
+
+Register custom capabilities with ``default=False``, on both the
+``@switchable`` and the command class, so that adding one changes nothing
+until a repository allows it by name.
+
+The design and its rationale are in
+`docs/design/configurable-commands.md <./docs/design/configurable-commands.md>`_.
 
 Using docker-compose
 --------------------

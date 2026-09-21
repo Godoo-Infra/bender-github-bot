@@ -3,13 +3,22 @@
 
 import pytest
 
+from oca_github_bot import registry
 from oca_github_bot.commands import (
+    COMMANDS,
+    BotCommand,
     InvalidCommandError,
     InvalidOptionsError,
     OptionsError,
     RequiredOptionError,
+    build_command_re,
+    command,
     parse_commands,
+    usage_text,
 )
+from oca_github_bot.commands import base as commands_base
+
+from .common import set_config
 
 
 def test_parse_command_not_a_command():
@@ -104,3 +113,96 @@ This is the one {merge_command} patch
     command = command[0]
     assert command.name == "merge"
     assert command.bumpversion_mode == "patch"
+
+
+@pytest.fixture
+def prefix(request, monkeypatch):
+    """Parse commands with an alternative prefix."""
+    monkeypatch.setattr(
+        commands_base, "BOT_COMMAND_RE", build_command_re([request.param])
+    )
+    return request.param
+
+
+@pytest.mark.parametrize("prefix", ["/ocabot", "/bender", "@bot"], indirect=True)
+def test_parse_command_honours_the_configured_prefix(prefix):
+    cmds = list(parse_commands(f"{prefix} merge patch"))
+    assert [(cmd.name, cmd.options) for cmd in cmds] == [("merge", ["patch"])]
+
+
+def test_parse_command_several_prefixes(monkeypatch):
+    # a second prefix can run alongside the first, during a rename
+    monkeypatch.setattr(
+        commands_base, "BOT_COMMAND_RE", build_command_re(["/ocabot", "/bender"])
+    )
+    cmds = list(parse_commands("/ocabot merge patch\n/bender rebase"))
+    assert [(cmd.name, cmd.options) for cmd in cmds] == [
+        ("merge", ["patch"]),
+        ("rebase", []),
+    ]
+
+
+@pytest.mark.parametrize("prefix", ["/bender"], indirect=True)
+def test_the_old_prefix_stops_working_when_it_is_replaced(prefix):
+    assert list(parse_commands("/ocabot merge patch")) == []
+
+
+def test_parse_command_migration():
+    cmds = list(parse_commands("/ocabot migration some_module"))
+    assert len(cmds) == 1
+    assert cmds[0].name == "migration"
+    assert cmds[0].module == "some_module"
+    with pytest.raises(InvalidOptionsError):
+        list(parse_commands("/ocabot migration"))
+
+
+def test_parse_command_config():
+    cmds = list(parse_commands("/ocabot config"))
+    assert len(cmds) == 1
+    assert cmds[0].name == "config"
+    assert cmds[0].always_available is True
+
+
+def test_commands_are_registered_as_capabilities():
+    assert COMMANDS["merge"].capability() == "merge_bot"
+    assert registry.get("merge").kind == registry.COMMAND
+    # the word a user types is an alias of the capability a policy file names
+    assert registry.canonical("merge") == "merge_bot"
+
+
+def test_usage_is_generated_from_the_registered_commands():
+    usage = usage_text()
+    for name in COMMANDS:
+        assert name in usage
+
+
+def test_usage_can_be_overridden_by_configuration():
+    with set_config(OCABOT_USAGE="do not use this bot"):
+        assert usage_text() == "do not use this bot"
+
+
+def test_registering_a_command_twice_is_rejected():
+    saved = registry.snapshot()
+    try:
+
+        @command
+        class First(BotCommand):
+            name = "duplicated"
+
+        with pytest.raises(registry.DuplicateCapabilityError):
+
+            @command
+            class Second(BotCommand):
+                name = "duplicated"
+
+    finally:
+        COMMANDS.pop("duplicated", None)
+        registry.restore(saved)
+
+
+def test_a_command_must_declare_a_name():
+    with pytest.raises(ValueError):
+
+        @command
+        class Nameless(BotCommand):
+            pass

@@ -2,27 +2,79 @@
 # Distributed under the MIT License (http://opensource.org/licenses/MIT).
 
 import ast
+import inspect
 import logging
 import os
 from functools import wraps
 
+from . import registry
 from .pypi import MultiDistPublisher, RsyncDistPublisher, TwineDistPublisher
+from .registry import COMMAND, STEP, TASK  # noqa: F401
 
 _logger = logging.getLogger("oca_gihub_bot.tasks")
 
 
-def switchable(switch_name=None):
+def _org_repo_ref_of_call(func, args, kwargs):
+    """Find the repository a switchable call is acting on, from its arguments.
+
+    Every switchable function names its arguments ``org`` and ``repo``, though
+    not always in that order (``tag_needs_review`` takes ``org, pr, repo``), so
+    they are located by name rather than by position.
+    """
+    try:
+        bound = inspect.signature(func).bind_partial(*args, **kwargs)
+    except TypeError:
+        return None, None, None
+    arguments = bound.arguments
+    ref = arguments.get("branch") or arguments.get("target_branch")
+    return arguments.get("org"), arguments.get("repo"), ref
+
+
+def _repo_allows(name, org, repo, ref):
+    # Imported here, not at module level: policy reads the repository through
+    # github.py, which imports this module.
+    from . import policy
+
+    try:
+        return policy.is_allowed(name, org, repo, ref)
+    except Exception:
+        _logger.exception(
+            "Could not resolve the policy of %s/%s for %s; allowing it",
+            org,
+            repo,
+            name,
+        )
+        # Fail open: an unreadable policy must not stop the bot working.
+        return True
+
+
+def switchable(switch_name=None, kind=registry.TASK, default=True, description=""):
+    """Make a function switchable on and off by configuration.
+
+    Registers the capability so that it can be named in ``BOT_TASKS``, in
+    ``BOT_TASKS_DISABLED`` and in a repository's policy file, then gates every
+    call on both.
+    """
+
     def wrap(func):
+        sname = switch_name if switch_name is not None else func.__name__
+        registry.register(sname, kind=kind, default=default, description=description)
+
         @wraps(func)
         def func_wrapper(*args, **kwargs):
-            sname = switch_name
-            if switch_name is None:
-                sname = func.__name__
-
             if (
                 BOT_TASKS != ["all"] and sname not in BOT_TASKS
             ) or sname in BOT_TASKS_DISABLED:
                 _logger.debug("Method %s skipped (Disabled by config)", sname)
+                return
+            org, repo, ref = _org_repo_ref_of_call(func, args, kwargs)
+            if org and repo and not _repo_allows(sname, org, repo, ref):
+                _logger.info(
+                    "Method %s skipped for %s/%s (disabled by repository policy)",
+                    sname,
+                    org,
+                    repo,
+                )
                 return
             return func(*args, **kwargs)
 
@@ -54,15 +106,23 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN")
 
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 
-# Coma separated list of task to run
-# By default all configured tasks are run.
-# Available tasks:
-#  delete_branch,tag_approved,tag_ready_to_merge,gen_addons_table,
-#  gen_addons_readme,gen_addons_icon,setuptools_odoo,merge_bot,tag_needs_review,
-#  migration_issue_bot,whool_init,gen_metapackage,label_modified_addons
+# Coma separated list of task to run.
+# By default all tasks registered with default=True are run. The authoritative
+# list is the capability registry, which the ``config`` bot command reports.
 BOT_TASKS = os.environ.get("BOT_TASKS", "all").split(",")
 
 BOT_TASKS_DISABLED = os.environ.get("BOT_TASKS_DISABLED", "").split(",")
+
+# Coma separated list of prefixes a command may be invoked with. Several allow
+# a second prefix to run alongside the first, during a rename.
+BOT_COMMAND_PREFIX = [
+    prefix.strip()
+    for prefix in os.environ.get("BOT_COMMAND_PREFIX", "/ocabot").split(",")
+    if prefix.strip()
+]
+
+# Name of the per-repository policy file, read from the target branch.
+BOT_CONFIG_FILENAME = os.environ.get("BOT_CONFIG_FILENAME", ".bender.yml")
 
 GEN_ADDONS_TABLE_EXTRA_ARGS = (
     os.environ.get("GEN_ADDONS_TABLE_EXTRA_ARGS", "")
@@ -115,13 +175,9 @@ if os.environ.get("OCABOT_TWINE_REPOSITORIES"):
             TwineDistPublisher(index_url, repository_url, username, password)
         )
 
-OCABOT_USAGE = os.environ.get(
-    "OCABOT_USAGE",
-    "**Ocabot commands**\n"
-    "* ``ocabot merge major|minor|patch|nobump``\n"
-    "* ``ocabot rebase``\n"
-    "* ``ocabot migration {MODULE_NAME}``",
-)
+# Generated from the registered commands when unset, so that the usage message
+# a user is shown always matches the commands this deployment actually has.
+OCABOT_USAGE = os.environ.get("OCABOT_USAGE")
 
 OCABOT_EXTRA_DOCUMENTATION = os.environ.get(
     "OCABOT_EXTRA_DOCUMENTATION",

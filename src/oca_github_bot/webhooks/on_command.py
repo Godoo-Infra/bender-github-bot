@@ -1,8 +1,9 @@
 # Copyright (c) initOS GmbH 2019
 # Distributed under the MIT License (http://opensource.org/licenses/MIT).
 
-from ..commands import CommandError, parse_commands
-from ..config import OCABOT_EXTRA_DOCUMENTATION, OCABOT_USAGE
+from ..commands import CommandError, parse_commands, usage_text
+from ..commands.dispatch import dispatch_command
+from ..config import OCABOT_EXTRA_DOCUMENTATION
 from ..router import router
 from ..tasks.add_pr_comment import add_pr_comment
 
@@ -22,8 +23,13 @@ async def on_command(event, gh, *args, **kwargs):
 
 async def _on_command(org, repo, pr, username, text):
     try:
-        for command in parse_commands(text):
-            command.delay(org, repo, pr, username)
+        # Parse here, so that a malformed command is reported at once, and
+        # dispatch the rest: deciding whether the repository allows a command
+        # needs a GitHub call, which does not belong in a webhook handler.
+        for command in list(parse_commands(text)):
+            dispatch_command.delay(
+                org, repo, pr, username, command.name, command.options
+            )
     except CommandError as e:
         # Add a comment on the current PR, if
         # the command was misunderstood by the bot
@@ -33,6 +39,6 @@ async def _on_command(org, repo, pr, username, text):
             pr,
             f"Hi @{username}. Your command failed:\n\n"
             f"``{e}``.\n\n"
-            f"{OCABOT_USAGE}\n\n"
+            f"{usage_text()}\n\n"
             f"{OCABOT_EXTRA_DOCUMENTATION}",
         )

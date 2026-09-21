@@ -12,6 +12,7 @@
   lxml,
   odoorpc,
   packaging,
+  pyyaml,
   redis,
   sentry-sdk,
   setuptools-odoo,
@@ -53,6 +54,7 @@ buildPythonPackage {
     lxml
     odoorpc
     packaging
+    pyyaml
     redis # celery[redis] extra
     sentry-sdk
     setuptools # build_wheels.py and setuptools-odoo need it at runtime

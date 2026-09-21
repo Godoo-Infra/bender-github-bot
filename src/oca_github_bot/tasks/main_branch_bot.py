@@ -8,6 +8,7 @@ from ..config import (
     GEN_ADDON_README_EXTRA_ARGS,
     GEN_ADDONS_TABLE_EXTRA_ARGS,
     GEN_PYPROJECT_MIN_VERSION,
+    STEP,
     dist_publisher,
     switchable,
 )
@@ -19,7 +20,7 @@ from ..version_branch import is_main_branch_bot_branch, is_supported_main_branch
 _logger = getLogger(__name__)
 
 
-@switchable("gen_addons_table")
+@switchable("gen_addons_table", kind=STEP)
 def _gen_addons_table(org, repo, branch, cwd):
     _logger.info("oca-gen-addons-table in %s/%s@%s", org, repo, branch)
     gen_addons_table_cmd = ["oca-gen-addons-table", "--commit"]
@@ -28,7 +29,7 @@ def _gen_addons_table(org, repo, branch, cwd):
     )
 
 
-@switchable("gen_addons_readme")
+@switchable("gen_addons_readme", kind=STEP)
 def _gen_addons_readme(org, repo, branch, cwd):
     _logger.info("oca-gen-addon-readme in %s/%s@%s", org, repo, branch)
     gen_addon_readme_cmd = [
@@ -49,14 +50,14 @@ def _gen_addons_readme(org, repo, branch, cwd):
     )
 
 
-@switchable("gen_addons_icon")
+@switchable("gen_addons_icon", kind=STEP)
 def _gen_addons_icon(org, repo, branch, cwd):
     _logger.info("oca-gen-addon-icon in %s/%s@%s", org, repo, branch)
     gen_addon_icon_cmd = ["oca-gen-addon-icon", "--addons-dir", cwd, "--commit"]
     check_call(gen_addon_icon_cmd, cwd=cwd)
 
 
-@switchable("setuptools_odoo")
+@switchable("setuptools_odoo", kind=STEP)
 def _setuptools_odoo_make_default(org, repo, branch, cwd):
     _logger.info("setuptools-odoo-make-default in %s/%s@%s\n", org, repo, branch)
     make_default_setup_cmd = [
@@ -73,7 +74,7 @@ def _setuptools_odoo_make_default(org, repo, branch, cwd):
     )
 
 
-@switchable("whool_init")
+@switchable("whool_init", kind=STEP)
 def _whool_init(org, repo, branch, cwd):
     _logger.info(
         "generate pyproject.toml with whool init in %s/%s@%s\n", org, repo, branch
@@ -83,7 +84,7 @@ def _whool_init(org, repo, branch, cwd):
     git_commit_if_needed("*/pyproject.toml", "[BOT] add pyproject.toml", cwd=cwd)
 
 
-@switchable("gen_metapackage")
+@switchable("gen_metapackage", kind=STEP)
 def _gen_metapackage(org, repo, branch, cwd):
     if not is_supported_main_branch(branch, min_version="15.0"):
         # We don't support branches < 15 because I don't want to worry about

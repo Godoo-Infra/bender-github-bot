@@ -43,6 +43,8 @@ setup(
         "whool",
         # packaging
         "packaging>=22",
+        # per-repository policy files
+        "PyYAML",
     ],
     extras_require={
         "test": [
