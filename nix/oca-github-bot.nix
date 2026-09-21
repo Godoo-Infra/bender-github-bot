@@ -31,7 +31,7 @@ buildPythonPackage {
     fileset = lib.fileset.unions [
       ../setup.py
       ../setup.cfg
-      ../README.rst
+      ../README.md
       ../src
     ];
   };
