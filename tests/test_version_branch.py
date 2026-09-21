@@ -74,8 +74,7 @@ def test_merge_bot_branch_name():
 def test_search_merge_bot_branch():
     text = "blah blah 12.0-benderbot-merge-pr-100-by-toto-bump-no more stuff"
     assert (
-        search_merge_bot_branch(text)
-        == "12.0-benderbot-merge-pr-100-by-toto-bump-no"
+        search_merge_bot_branch(text) == "12.0-benderbot-merge-pr-100-by-toto-bump-no"
     )
     text = "blah blah more stuff"
     assert search_merge_bot_branch(text) is None

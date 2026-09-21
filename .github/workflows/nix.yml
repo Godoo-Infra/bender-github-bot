@@ -40,8 +40,7 @@ jobs:
         run: nix flake check -L
 
       - name: Run the tests
-        # the same command the devShell runs locally
+        # The same command the devShell runs locally. This builds the stack
+        # too: the devShell lists packages.stack among its inputs, so there is
+        # no separate build step to pay for.
         run: nix develop -c pytest -q --vcr-record=none
-
-      - name: Build the stack
-        run: nix build .#stack -L

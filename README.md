@@ -324,7 +324,7 @@ Both run on every pull request and on pushes to `master`:
 | Workflow | What it runs |
 | --- | --- |
 | [CI](./.github/workflows/ci.yml) | `tox`: pytest on python 3.12, the README check, and pre-commit. |
-| [Nix](./.github/workflows/nix.yml) | `nix flake check`, the test suite in the devShell, and a build of the stack. |
+| [Nix](./.github/workflows/nix.yml) | `nix flake check`, then the test suite in the devShell, which builds the stack along the way. |
 
 The nix workflow's first run compiles the python 3.12 package set, which
 nixpkgs does not cache, so expect it to be slow once and quick afterwards. A
